@@ -21,6 +21,10 @@ import React, {
     description: string;
     attachments: { name: string; uri: string }[];
     source: CalendarItemSource;
+  // Optional link to a parent goal/event created by AI planning.
+  relatedGoalId?: string;
+  // Optional ISO timestamp for reminder scheduling/display.
+  reminderAt?: string;
   }
   
   interface CalendarContextValue {

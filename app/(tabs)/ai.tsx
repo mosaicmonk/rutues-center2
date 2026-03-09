@@ -1,128 +1,230 @@
-import React, { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React, { useMemo, useRef, useState } from "react";
+import {
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
+import { useCalendar } from "../../CalendarContext";
+import { useTasks } from "../../TaskContext";
 import AIActivationBubble, { BubbleVisualState } from "../../components/ai/AIActivationBubble";
+import { buildPlanFromTranscript } from "../../services/aiPlanner";
 import { askAI } from "../../services/aiService";
 
+type VoiceState = "idle" | "listening" | "processing" | "speaking";
+
 export default function AIScreen() {
-  // User prompt input shown at the top of the AI screen.
-  const [userInput, setUserInput] = useState("");
-  // Raw AI payload returned from the service.
-  const [aiResponse, setAIResponse] = useState<unknown>(null);
-  // Error text for service failures.
-  const [error, setError] = useState<string | null>(null);
-  // Loading state already used by previous Ask AI button logic.
-  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const { addItem } = useCalendar();
+  const { addTask } = useTasks();
 
-  // Keep the exact AI request flow, only changing trigger source to the bubble.
-  async function handleAskAI() {
-    if (!userInput.trim() || loading) return;
+  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
+  const [listeningModalOpen, setListeningModalOpen] = useState(false);
+  const [draftTranscript, setDraftTranscript] = useState("");
+  const [statusMessage, setStatusMessage] = useState("Tap orb to start");
 
-    setLoading(true);
-    setError(null);
+  const speakTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const result = await askAI(userInput.trim());
+  const resetSession = () => {
+    if (speakTimeoutRef.current) {
+      clearTimeout(speakTimeoutRef.current);
+      speakTimeoutRef.current = null;
+    }
 
-    if (!result.success) {
-      setError(result.error ?? "AI request failed");
-      setAIResponse(null);
-      setLoading(false);
+    setListeningModalOpen(false);
+    setVoiceState("idle");
+    setDraftTranscript("");
+    setStatusMessage("Tap orb to start");
+  };
+
+  const startListening = () => {
+    if (voiceState !== "idle") return;
+    setDraftTranscript("");
+    setVoiceState("listening");
+    setStatusMessage("Listening...");
+    setListeningModalOpen(true);
+  };
+
+  const processTranscript = async () => {
+    const transcript = draftTranscript.trim();
+    if (!transcript) {
+      setStatusMessage("No speech detected. Tap orb to try again.");
+      setVoiceState("idle");
+      setListeningModalOpen(false);
       return;
     }
 
-    setAIResponse(result);
-    setLoading(false);
-  }
+    setListeningModalOpen(false);
+    setVoiceState("processing");
+    setStatusMessage("Processing your plan...");
 
-  // Map screen state to bubble animation mode.
-  const bubbleState: BubbleVisualState = loading ? "active" : "idle";
+    // We call askAI for language polish, but task creation is based on structured parsing
+    // to avoid dumping raw model output into the UI.
+    const aiResult = await askAI(transcript);
+    const plan = buildPlanFromTranscript(transcript);
 
-  // Keep status copy centralized to simplify future voice/listening state wiring.
+    plan.items.forEach((item) => {
+      addItem(item);
+      if (item.kind === "task") {
+        addTask({
+          id: item.id,
+          title: item.title,
+          time: `By ${item.date.toDateString()}`,
+          app: "AI Planner",
+          priority: "Medium",
+        });
+      }
+    });
+
+    setVoiceState("speaking");
+    setStatusMessage(
+      aiResult.success
+        ? plan.summary
+        : `${plan.summary} (Offline wording fallback used.)`
+    );
+
+    speakTimeoutRef.current = setTimeout(() => {
+      setVoiceState("idle");
+      setStatusMessage("Plan saved to Calendar. Tap orb for another plan.");
+    }, 1800);
+  };
+
+  const bubbleState: BubbleVisualState = voiceState === "idle" ? "idle" : "active";
+
+  const isFlowActive = voiceState === "listening" || voiceState === "processing" || voiceState === "speaking";
+
   const bubbleLabel = useMemo(() => {
-    if (loading) {
-      return "Thinking...";
-    }
-
-    if (!userInput.trim()) {
-      return "Type a prompt first";
-    }
-
-    return "Tap to Ask";
-  }, [loading, userInput]);
+    if (voiceState === "listening") return "Listening";
+    if (voiceState === "processing") return "Processing";
+    if (voiceState === "speaking") return "Saved";
+    return "Tap to talk";
+  }, [voiceState]);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Rutues AI Planner</Text>
+    <Pressable
+      style={styles.container}
+      onPress={() => {
+        if (isFlowActive) {
+          resetSession();
+        }
+      }}
+    >
+      <View style={styles.topRow}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.push("/(tabs)")}>
+          <Ionicons name="arrow-back" color="#fff" size={18} />
+          <Text style={styles.backText}>Home</Text>
+        </TouchableOpacity>
+      </View>
 
-      <TextInput
-        placeholder="Example: Plan a birthday party May 31 for 50 guests"
-        placeholderTextColor="#747491"
-        value={userInput}
-        onChangeText={setUserInput}
-        style={styles.input}
-      />
+      <View style={styles.centerArea}>
+        <Pressable
+          onPress={(event) => {
+            event.stopPropagation();
+            startListening();
+          }}
+        >
+          <AIActivationBubble onPress={startListening} state={bubbleState} label={bubbleLabel} />
+        </Pressable>
+        <Text style={styles.statusText}>{statusMessage}</Text>
+      </View>
 
-      {/* New premium AI bubble trigger replacing the old Ask AI button. */}
-      <AIActivationBubble
-        onPress={handleAskAI}
-        disabled={loading || !userInput.trim()}
-        state={bubbleState}
-        label={bubbleLabel}
-      />
-
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-      <ScrollView style={styles.responseBox} contentContainerStyle={styles.responseContent}>
-        {aiResponse ? (
-          <Text selectable style={styles.responseText}>
-            {JSON.stringify(aiResponse, null, 2)}
-          </Text>
-        ) : (
-          <Text style={styles.placeholderText}>AI response will appear here.</Text>
-        )}
-      </ScrollView>
-    </View>
+      <Modal visible={listeningModalOpen} transparent animationType="fade" onRequestClose={resetSession}>
+        <Pressable style={styles.modalBackdrop} onPress={resetSession}>
+          <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
+            <Text style={styles.modalTitle}>Listening</Text>
+            <TextInput
+              value={draftTranscript}
+              onChangeText={setDraftTranscript}
+              multiline
+              placeholder="Speak your plan, then paste/type transcript here to continue"
+              placeholderTextColor="#7e7e94"
+              style={styles.modalInput}
+            />
+            <TouchableOpacity style={styles.doneBtn} onPress={processTranscript}>
+              <Text style={styles.doneBtnText}>Done Speaking</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 14,
     backgroundColor: "#0e0e11",
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-    color: "white",
+  topRow: {
+    paddingTop: 58,
+    paddingHorizontal: 16,
   },
-  input: {
-    backgroundColor: "#1c1c21",
-    padding: 15,
-    borderRadius: 12,
-    color: "white",
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#202030",
   },
-  errorText: {
-    color: "#ff7f8c",
-    marginTop: 4,
+  backText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  centerArea: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  statusText: {
+    marginTop: 18,
+    color: "#d7d7e6",
+    fontSize: 14,
+    textAlign: "center",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    backgroundColor: "#1b1b24",
+    borderRadius: 16,
+    padding: 16,
+  },
+  modalTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
     marginBottom: 10,
   },
-  responseBox: {
-    flex: 1,
-    backgroundColor: "#1c1c21",
-    borderRadius: 18,
-    marginTop: 10,
-  },
-  responseContent: {
+  modalInput: {
+    minHeight: 120,
+    backgroundColor: "#101018",
+    borderRadius: 12,
+    color: "#fff",
     padding: 12,
+    textAlignVertical: "top",
   },
-  responseText: {
-    color: "#ffffff",
+  doneBtn: {
+    marginTop: 12,
+    backgroundColor: "#8f5bff",
+    borderRadius: 12,
+    paddingVertical: 12,
   },
-  placeholderText: {
-    color: "#8f8fa8",
+  doneBtnText: {
+    color: "#fff",
+    textAlign: "center",
+    fontWeight: "700",
   },
 });
