@@ -1,59 +1,57 @@
-/*
-=========================================================
-FILE: services/aiService.ts
-LOCATION: ROOT → services → aiService.ts
+import Constants from "expo-constants";
+import { Platform } from "react-native";
 
-PURPOSE:
-This file sends requests from the React Native app
-to your backend AI server running on port 3000.
+interface AIResponse {
+  success: boolean;
+  error?: string;
+  [key: string]: unknown;
+}
 
-Instead of curl, your app will call this function.
-=========================================================
-*/
+const getApiBaseUrl = () => {
+  const envUrl = process.env.EXPO_PUBLIC_AI_BASE_URL;
+  if (envUrl) {
+    return envUrl;
+  }
 
-export async function askAI(userMessage: string) {
+  const hostUri = Constants.expoConfig?.hostUri ?? Constants.manifest2?.extra?.expoGo?.debuggerHost;
+  const host = hostUri?.split(":")[0];
 
-    try {
-  
-      /*
-      ============================================
-      Send POST request to backend AI server
-      ============================================
-      */
-  
-      const response = await fetch("http://localhost:3000/ai", {
-  
-        method: "POST",
-  
-        headers: {
-          "Content-Type": "application/json"
-        },
-  
-        body: JSON.stringify({
-          message: userMessage
-        })
-  
-      })
-  
-      /*
-      ============================================
-      Convert server response to JSON
-      ============================================
-      */
-  
-      const data = await response.json()
-  
-      return data
-  
-    } catch (error) {
-  
-      console.error("AI request failed:", error)
-  
+  if (host) {
+    return `http://${host}:3000`;
+  }
+
+  if (Platform.OS === "android") {
+    return "http://10.0.2.2:3000";
+  }
+
+  return "http://localhost:3000";
+};
+
+export async function askAI(userMessage: string): Promise<AIResponse> {
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/ai`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message: userMessage,
+      }),
+    });
+
+    if (!response.ok) {
       return {
         success: false,
-        error: "AI request failed"
-      }
-  
+        error: `Request failed with status ${response.status}`,
+      };
     }
-  
+
+    return (await response.json()) as AIResponse;
+  } catch {
+    return {
+      success: false,
+      error:
+        "Unable to reach AI service. Set EXPO_PUBLIC_AI_BASE_URL or run backend on port 3000.",
+    };
   }
+}
