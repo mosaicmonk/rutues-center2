@@ -1,33 +1,79 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
+// app/(tabs)/_layout.tsx
 
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+/**
+ * TABS LAYOUT (NOT ROOT)
+ * =======================
+ * This file defines the BOTTOM TAB NAVIGATION.
+ *
+ * ❌ This is NOT the root layout.
+ * ❌ Do NOT put providers here.
+ *
+ * This layout controls the tab bar:
+ * Home | AI | Calendar | Profile
+ *
+ * Each tab corresponds to a file inside:
+ * app/(tabs)/
+ *
+ * - app/(tabs)/index.tsx     -> "Home"
+ * - app/(tabs)/ai.tsx        -> "AI"
+ * - app/(tabs)/calendar.tsx  -> "Calendar"
+ * - app/(tabs)/profile.tsx   -> "Profile"
+ */
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+import React from "react";
+import { Tabs } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
+export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
+        tabBarActiveTintColor: "#8f5bff",
+        tabBarInactiveTintColor: "#7a73c2",
+        tabBarStyle: {
+          backgroundColor: "#0b0b12",
+          borderTopColor: "#1c1c2e",
+        },
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: "Home",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home" size={size} color={color} />
+          ),
         }}
       />
+
       <Tabs.Screen
-        name="explore"
+        name="ai"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: "AI",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="sparkles" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          title: "Calendar",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calendar" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profile",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person" size={size} color={color} />
+          ),
         }}
       />
     </Tabs>
