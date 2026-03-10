@@ -27,7 +27,6 @@ export default function AIScreen() {
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [listeningModalOpen, setListeningModalOpen] = useState(false);
   const [draftTranscript, setDraftTranscript] = useState("");
-  const [statusMessage, setStatusMessage] = useState("Tap orb to start");
 
   const speakTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -40,21 +39,18 @@ export default function AIScreen() {
     setListeningModalOpen(false);
     setVoiceState("idle");
     setDraftTranscript("");
-    setStatusMessage("Tap orb to start");
   };
 
   const startListening = () => {
     if (voiceState !== "idle") return;
     setDraftTranscript("");
     setVoiceState("listening");
-    setStatusMessage("Listening...");
     setListeningModalOpen(true);
   };
 
   const processTranscript = async () => {
     const transcript = draftTranscript.trim();
     if (!transcript) {
-      setStatusMessage("No speech detected. Tap orb to try again.");
       setVoiceState("idle");
       setListeningModalOpen(false);
       return;
@@ -62,13 +58,14 @@ export default function AIScreen() {
 
     setListeningModalOpen(false);
     setVoiceState("processing");
-    setStatusMessage("Processing your plan...");
 
-    // We call askAI for language polish, but task creation is based on structured parsing
-    // to avoid dumping raw model output into the UI.
-    const aiResult = await askAI(transcript);
+    // Keep existing AI call for language polish/fallback handling.
+    await askAI(transcript);
+
+    // Parse transcript into structured calendar/task records used by the real app state.
     const plan = buildPlanFromTranscript(transcript);
 
+    // Save first, navigate second, so Calendar is already populated on arrival.
     plan.items.forEach((item) => {
       addItem(item);
       if (item.kind === "task") {
@@ -83,16 +80,18 @@ export default function AIScreen() {
     });
 
     setVoiceState("speaking");
-    setStatusMessage(
-      aiResult.success
-        ? plan.summary
-        : `${plan.summary} (Offline wording fallback used.)`
-    );
 
+    const focusDate = plan.items[0]?.date ?? new Date();
+
+    // Small delay gives users a clear "saved" state before transitioning tabs.
     speakTimeoutRef.current = setTimeout(() => {
       setVoiceState("idle");
-      setStatusMessage("Plan saved to Calendar. Tap orb for another plan.");
-    }, 1800);
+      setDraftTranscript("");
+      router.push({
+        pathname: "/(tabs)/calendar",
+        params: { focusDate: focusDate.toISOString() },
+      });
+    }, 320);
   };
 
   const bubbleState: BubbleVisualState = voiceState === "idle" ? "idle" : "active";
@@ -110,6 +109,7 @@ export default function AIScreen() {
     <Pressable
       style={styles.container}
       onPress={() => {
+        // Keep tap-off-screen behavior to stop/reset active session.
         if (isFlowActive) {
           resetSession();
         }
@@ -131,7 +131,6 @@ export default function AIScreen() {
         >
           <AIActivationBubble onPress={startListening} state={bubbleState} label={bubbleLabel} />
         </Pressable>
-        <Text style={styles.statusText}>{statusMessage}</Text>
       </View>
 
       <Modal visible={listeningModalOpen} transparent animationType="fade" onRequestClose={resetSession}>
@@ -184,12 +183,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
-  },
-  statusText: {
-    marginTop: 18,
-    color: "#d7d7e6",
-    fontSize: 14,
-    textAlign: "center",
   },
   modalBackdrop: {
     flex: 1,
