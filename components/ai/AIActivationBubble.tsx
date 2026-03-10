@@ -1,39 +1,21 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 
-/**
- * Visual states used to drive the bubble animation intensity.
- * - idle: subtle breathing animation.
- * - active: stronger pulse used while loading/listening/processing.
- */
 export type BubbleVisualState = "idle" | "active";
 
 type AIActivationBubbleProps = {
-  /** Called when the user taps the bubble to trigger AI logic. */
   onPress: () => void;
-  /** Prevent repeated taps while logic is already running. */
   disabled?: boolean;
-  /** Whether the bubble should use active/high-energy animation. */
   state: BubbleVisualState;
-  /** Small helper label rendered below the bubble. */
   label: string;
 };
 
-/**
- * Reusable, high-end AI orb component with layered glow, pulse, and ripple animations.
- * Built with React Native Animated API so it stays Expo-compatible and lightweight.
- */
 export default function AIActivationBubble({ onPress, disabled = false, state, label }: AIActivationBubbleProps) {
-  // Continuous pulse for orb breathing (idle) and stronger motion (active).
   const pulse = useRef(new Animated.Value(0)).current;
-  // Ripple ring 1 grows and fades.
   const rippleOne = useRef(new Animated.Value(0)).current;
-  // Ripple ring 2 starts offset from ring 1 to create a living effect.
   const rippleTwo = useRef(new Animated.Value(0)).current;
-  // Short tap feedback scale animation.
   const tapFeedback = useRef(new Animated.Value(1)).current;
 
-  // Rebuild animation loops only when state changes.
   useEffect(() => {
     pulse.stopAnimation();
     rippleOne.stopAnimation();
@@ -42,7 +24,6 @@ export default function AIActivationBubble({ onPress, disabled = false, state, l
     const pulseDuration = state === "active" ? 1400 : 2800;
     const rippleDuration = state === "active" ? 1700 : 2400;
 
-    // Bubble breathing loop.
     const pulseLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, {
@@ -60,7 +41,6 @@ export default function AIActivationBubble({ onPress, disabled = false, state, l
       ])
     );
 
-    // Ring one loop.
     const rippleOneLoop = Animated.loop(
       Animated.timing(rippleOne, {
         toValue: 1,
@@ -70,7 +50,6 @@ export default function AIActivationBubble({ onPress, disabled = false, state, l
       })
     );
 
-    // Ring two loop with delay so both rings never overlap exactly.
     const rippleTwoLoop = Animated.loop(
       Animated.sequence([
         Animated.delay(rippleDuration / 2),
@@ -94,7 +73,6 @@ export default function AIActivationBubble({ onPress, disabled = false, state, l
     };
   }, [pulse, rippleOne, rippleTwo, state]);
 
-  // Map pulse value to scale values for orb and glow layers.
   const orbScale = pulse.interpolate({
     inputRange: [0, 1],
     outputRange: state === "active" ? [1, 1.08] : [1, 1.03],
@@ -110,7 +88,6 @@ export default function AIActivationBubble({ onPress, disabled = false, state, l
     outputRange: state === "active" ? [0.32, 0.56] : [0.22, 0.34],
   });
 
-  // Helper to derive ring styles from a given animated value.
   const ringStyle = useMemo(
     () => (value: Animated.Value) => ({
       transform: [
@@ -129,11 +106,8 @@ export default function AIActivationBubble({ onPress, disabled = false, state, l
     [state]
   );
 
-  // Handle press with a quick in/out scale to make interaction feel physical.
   const handlePress = () => {
-    if (disabled) {
-      return;
-    }
+    if (disabled) return;
 
     Animated.sequence([
       Animated.timing(tapFeedback, {
@@ -155,11 +129,9 @@ export default function AIActivationBubble({ onPress, disabled = false, state, l
 
   return (
     <View style={styles.wrapper}>
-      {/* Ripple rings sit behind the orb to add life and depth. */}
       <Animated.View style={[styles.ring, ringStyle(rippleOne)]} pointerEvents="none" />
       <Animated.View style={[styles.ring, ringStyle(rippleTwo)]} pointerEvents="none" />
 
-      {/* Outer ambient glow layer for premium neon feel. */}
       <Animated.View
         style={[
           styles.outerGlow,
@@ -171,7 +143,6 @@ export default function AIActivationBubble({ onPress, disabled = false, state, l
         pointerEvents="none"
       />
 
-      {/* Pressable orb that triggers AI logic. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Activate AI"
@@ -182,11 +153,9 @@ export default function AIActivationBubble({ onPress, disabled = false, state, l
         <Animated.View style={[styles.orbContainer, { transform: [{ scale: Animated.multiply(orbScale, tapFeedback) }] }]}>
           <View style={styles.orbCore} />
           <View style={styles.orbHighlight} pointerEvents="none" />
+          <Text style={styles.orbLabel}>{label}</Text>
         </Animated.View>
       </Pressable>
-
-      {/* Instruction/status label below the orb. */}
-      <Text style={styles.label}>{label}</Text>
     </View>
   );
 }
@@ -234,6 +203,7 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   orbCore: {
+    position: "absolute",
     width: "100%",
     height: "100%",
     borderRadius: 999,
@@ -249,11 +219,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.28)",
     transform: [{ rotate: "-18deg" }],
   },
-  label: {
-    marginTop: 20,
-    fontSize: 24,
-    fontWeight: "700",
+  orbLabel: {
+    marginTop: 96,
+    fontSize: 18,
+    fontWeight: "800",
     letterSpacing: 0.2,
-    color: "#F4EFFF",
+    color: "#FFFFFF",
   },
 });

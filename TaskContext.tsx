@@ -19,6 +19,7 @@ import React, {
     tasks: Task[];
     addTask: (task: Task) => void;
     reorderTasks: (newOrder: Task[]) => void; // 👈 NEW
+  removeTask: (id: string) => void;
   }
   
   const TaskContext = createContext<TaskContextValue | undefined>(undefined);
@@ -59,6 +60,10 @@ import React, {
     const addTask = (task: Task) => {
       setTasks((prev) => [...prev, task]);
     };
+
+    const removeTask = (id: string) => {
+      setTasks((prev) => prev.filter((task) => task.id !== id));
+    };
   
     // 👇 NEW — required for drag & drop
     const reorderTasks = (newOrder: Task[]) => {
@@ -66,7 +71,7 @@ import React, {
     };
   
     return (
-      <TaskContext.Provider value={{ tasks, addTask, reorderTasks }}>
+      <TaskContext.Provider value={{ tasks, addTask, reorderTasks, removeTask }}>
         {children}
       </TaskContext.Provider>
     );

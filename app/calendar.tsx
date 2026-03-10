@@ -2,9 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import BottomSheet, { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
+import { useLocalSearchParams } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   Keyboard,
   Modal,
   PanResponder,
@@ -17,6 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CalendarItem, useCalendar } from "../CalendarContext";
 
@@ -55,8 +58,9 @@ const minutesToDate = (base: Date, minutes: number) => {
 const dateToMinutes = (date: Date) => date.getHours() * 60 + date.getMinutes();
 
 export default function CalendarScreen() {
-  const { addTask } = useTasks();
-  const { items, addItem, updateItem } = useCalendar();
+  const params = useLocalSearchParams<{ focusDate?: string }>();
+  const { addTask, removeTask } = useTasks();
+  const { items, addItem, updateItem, removeItem } = useCalendar();
   // (remove the old useState for items)
 
 
@@ -65,6 +69,16 @@ export default function CalendarScreen() {
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
+
+  useEffect(() => {
+    // Allow AI flow to focus a specific date after redirecting users here.
+    if (!params.focusDate) return;
+    const parsed = new Date(params.focusDate);
+    if (Number.isNaN(parsed.getTime())) return;
+
+    setSelectedDate(parsed);
+    setCurrentMonth(parsed);
+  }, [params.focusDate]);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [toggles, setToggles] = useState({
@@ -355,6 +369,18 @@ const [editingEnd, setEditingEnd] = useState<Date | null>(null);
     closeEditor();
   };
   
+  const onDeleteItem = (item: CalendarItem) => {
+    // Delete from calendar source and mirror removal from tasks when needed.
+    removeItem(item.id);
+    if (item.kind === "task") {
+      removeTask(item.id);
+    }
+
+    if (editingItem?.id === item.id) {
+      closeEditor();
+    }
+  };
+
   // collapse sheet when fields lose focus
   const collapseSheetOnBlur = () => {
     Keyboard.dismiss();
@@ -568,36 +594,63 @@ const [editingEnd, setEditingEnd] = useState<Date | null>(null);
     <Text style={styles.emptyText}>No tasks/events for this day.</Text>
   ) : (
     itemsForSelected.map((it) => (
-      // 🔥 Tapping this row now opens the editor with THIS event loaded
-      <TouchableOpacity key={it.id} onPress={() => openEditorForItem(it)}>
-        <View style={styles.itemCard}>
-          <View style={styles.itemHeaderRow}>
-            <View style={styles.itemTitleRow}>
-              <Ionicons
-                name={it.kind === "event" ? "calendar" : "checkmark-circle-outline"}
-                size={16}
-                color={it.kind === "event" ? "#4fd1c5" : "#a7a3c2"}
-                style={{ marginRight: 6 }}
-              />
-              <Text style={styles.itemTitle}>{it.title}</Text>
+      <View key={it.id} style={styles.swipeRowWrap}>
+        <Swipeable
+          overshootRight={false}
+          friction={2}
+          rightThreshold={38}
+          renderRightActions={(progress, dragX) => {
+            const scale = dragX.interpolate({
+              inputRange: [-120, -20, 0],
+              outputRange: [1, 0.92, 0.92],
+              extrapolate: "clamp",
+            });
+
+            return (
+              <Animated.View style={[styles.deleteAction, { transform: [{ scale }] }]}>
+                <TouchableOpacity
+                  style={styles.deleteActionBtn}
+                  onPress={() => onDeleteItem(it)}
+                  activeOpacity={0.82}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#fff" />
+                  <Text style={styles.deleteActionText}>Delete</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            );
+          }}
+        >
+          {/* Keep row press behavior so existing edit flow still works. */}
+          <TouchableOpacity onPress={() => openEditorForItem(it)} activeOpacity={0.9}>
+            <View style={styles.itemCard}>
+              <View style={styles.itemHeaderRow}>
+                <View style={styles.itemTitleRow}>
+                  <Ionicons
+                    name={it.kind === "event" ? "calendar" : "checkmark-circle-outline"}
+                    size={16}
+                    color={it.kind === "event" ? "#4fd1c5" : "#a7a3c2"}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.itemTitle}>{it.title}</Text>
+                </View>
+
+                <View style={[styles.colorDotSmall, { backgroundColor: it.color }]} />
+              </View>
+
+              {it.allDay ? (
+                <Text style={styles.itemTime}>All day</Text>
+              ) : (
+                Number.isFinite(it.startMin) &&
+                Number.isFinite(it.endMin) && (
+                  <Text style={styles.itemTime}>
+                    {formatTime(it.startMin)} – {formatTime(it.endMin)}
+                  </Text>
+                )
+              )}
             </View>
-
-            <View style={[styles.colorDotSmall, { backgroundColor: it.color }]} />
-          </View>
-
-          {/* Time label – no NaN */}
-          {it.allDay ? (
-            <Text style={styles.itemTime}>All day</Text>
-          ) : (
-            Number.isFinite(it.startMin) &&
-            Number.isFinite(it.endMin) && (
-              <Text style={styles.itemTime}>
-                {formatTime(it.startMin)} – {formatTime(it.endMin)}
-              </Text>
-            )
-          )}
-        </View>
-      </TouchableOpacity>
+          </TouchableOpacity>
+        </Swipeable>
+      </View>
     ))
   )}
 </ScrollView>
@@ -1120,7 +1173,20 @@ const styles = StyleSheet.create({
   selectedTitle: { color: "#fff", fontSize: 15, fontWeight: "700" },
   emptyText: { color: "#6d668f", fontSize: 12, marginTop: 6, fontStyle: "italic" },
 
-  itemCard: { backgroundColor: "#18122f", borderRadius: 16, padding: 10, marginTop: 8 },
+  swipeRowWrap: { marginTop: 8, borderRadius: 16, overflow: "hidden" },
+  itemCard: { backgroundColor: "#18122f", borderRadius: 16, padding: 10, borderWidth: 1, borderColor: "#241a44" },
+  deleteAction: {
+    width: 108,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#3a165f",
+    borderRadius: 16,
+    marginLeft: 8,
+    borderWidth: 1,
+    borderColor: "#7d3cff",
+  },
+  deleteActionBtn: { alignItems: "center", justifyContent: "center", gap: 4 },
+  deleteActionText: { color: "#fff", fontSize: 12, fontWeight: "700" },
   itemHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",

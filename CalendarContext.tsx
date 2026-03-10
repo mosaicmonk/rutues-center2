@@ -31,6 +31,7 @@ import React, {
     items: CalendarItem[];
     addItem: (item: CalendarItem) => void;
     updateItem: (item: CalendarItem) => void;
+    removeItem: (id: string) => void;
     clearAll: () => void;
   }
   
@@ -45,17 +46,21 @@ import React, {
       setItems((prev) => [...prev, item]);
     };
   
-    const updateItem = (item: CalendarItem) => {
-      setItems((prev) =>
-        prev.map((it) => (it.id === item.id ? item : it))
-      );
-    };
+  const updateItem = (item: CalendarItem) => {
+    setItems((prev) =>
+      prev.map((it) => (it.id === item.id ? item : it))
+    );
+  };
+
+  const removeItem = (id: string) => {
+    setItems((prev) => prev.filter((it) => it.id !== id));
+  };
   
     const clearAll = () => setItems([]);
   
     return (
       <CalendarContext.Provider
-        value={{ items, addItem, updateItem, clearAll }}
+        value={{ items, addItem, updateItem, removeItem, clearAll }}
       >
         {children}
       </CalendarContext.Provider>
