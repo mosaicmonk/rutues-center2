@@ -2,6 +2,7 @@ import { CalendarItem } from "../CalendarContext";
 
 export type ParsedUserInput = {
   goalTitle: string;
+  planningModel: PlanningModel;
   eventDate?: Date;
   eventTimeMin?: number;
   taskDate?: Date;
@@ -15,6 +16,8 @@ export type PlannerResult = {
   summary: string;
   items: CalendarItem[];
 };
+
+export type PlanningModel = "backward" | "milestone" | "checklist";
 
 const normalizeDate = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
@@ -80,6 +83,13 @@ export const parseUserInput = (transcript: string): ParsedUserInput => {
   const vendorMatch = transcript.match(/(?:cater(?:ing|er)?\s+(?:from|by)|vendor\s+is|food\s+from)\s+([^,.]+)/i);
 
   const lower = transcript.toLowerCase();
+  const planningModel =
+    /checklist|step by step|to-?do/i.test(transcript)
+      ? "checklist"
+      : /milestone|phase|stages?/i.test(transcript)
+        ? "milestone"
+        : "backward";
+
   const goalTitle = lower.includes("birthday")
     ? "Birthday party"
     : lower.includes("wedding")
@@ -93,6 +103,7 @@ export const parseUserInput = (transcript: string): ParsedUserInput => {
 
   return {
     goalTitle,
+    planningModel,
     eventDate,
     eventTimeMin,
     taskDate,
@@ -101,6 +112,93 @@ export const parseUserInput = (transcript: string): ParsedUserInput => {
     phone,
     notes: transcript,
   };
+};
+
+const scheduleWithinWindow = (eventDate: Date, planningWindowStart: Date, daysBeforeEvent: number) =>
+  clampDate(
+    new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate() - daysBeforeEvent),
+    planningWindowStart,
+    eventDate
+  );
+
+const pushModelTasks = (
+  model: PlanningModel,
+  parsed: ParsedUserInput,
+  transcript: string,
+  goalId: string,
+  eventDate: Date,
+  planningWindowStart: Date,
+  items: CalendarItem[]
+) => {
+  if (model === "checklist") {
+    items.push(
+      buildPlanningTask(
+        `Budget + guest list for ${parsed.goalTitle}`,
+        scheduleWithinWindow(eventDate, planningWindowStart, 21),
+        "Set spending limits, guest count, and top priorities.",
+        goalId
+      ),
+      buildPlanningTask(
+        `Book location and key vendors for ${parsed.goalTitle}`,
+        scheduleWithinWindow(eventDate, planningWindowStart, 14),
+        "Reserve venue and lock in must-have vendors.",
+        goalId
+      ),
+      buildPlanningTask(
+        `Finalize checklist for ${parsed.goalTitle}`,
+        scheduleWithinWindow(eventDate, planningWindowStart, 7),
+        "Confirm every line item is assigned and ready.",
+        goalId
+      )
+    );
+    return;
+  }
+
+  if (model === "milestone") {
+    items.push(
+      buildPlanningTask(
+        `Milestone 1: Foundation for ${parsed.goalTitle}`,
+        scheduleWithinWindow(eventDate, planningWindowStart, 30),
+        "Define scope, budget, and non-negotiables.",
+        goalId
+      ),
+      buildPlanningTask(
+        `Milestone 2: Vendor lock-in for ${parsed.goalTitle}`,
+        scheduleWithinWindow(eventDate, planningWindowStart, 18),
+        "Secure vendors and draft run-of-show.",
+        goalId
+      ),
+      buildPlanningTask(
+        `Milestone 3: Final readiness for ${parsed.goalTitle}`,
+        scheduleWithinWindow(eventDate, planningWindowStart, 5),
+        "Confirm attendees, logistics, and contingency plans.",
+        goalId
+      )
+    );
+    return;
+  }
+
+  if (/invitation/i.test(transcript)) {
+    items.push(
+      buildPlanningTask(
+        `Send invitations for ${parsed.goalTitle}`,
+        scheduleWithinWindow(eventDate, planningWindowStart, 14),
+        "Scheduled from your request to send invitations before the event.",
+        goalId
+      )
+    );
+  }
+
+  if (parsed.vendor) {
+    items.push(
+      buildPlanningTask(
+        `Confirm catering with ${parsed.vendor}`,
+        scheduleWithinWindow(eventDate, planningWindowStart, 7),
+        `Vendor requested: ${parsed.vendor}`,
+        goalId
+      )
+    );
+  }
 };
 
 const buildPlanningTask = (
@@ -158,39 +256,12 @@ export const buildPlanFromTranscript = (transcript: string): PlannerResult => {
       reminderAt: new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate() - 1, 9, 0).toISOString(),
     });
 
-    const scheduleWithinWindow = (daysBeforeEvent: number) =>
-      clampDate(
-        new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate() - daysBeforeEvent),
-        planningWindowStart,
-        eventDate
-      );
-
-    if (/invitation/i.test(transcript)) {
-      items.push(
-        buildPlanningTask(
-          `Send invitations for ${parsed.goalTitle}`,
-          scheduleWithinWindow(14),
-          "Scheduled from your request to send invitations before the event.",
-          goalId
-        )
-      );
-    }
-
-    if (parsed.vendor) {
-      items.push(
-        buildPlanningTask(
-          `Confirm catering with ${parsed.vendor}`,
-          scheduleWithinWindow(7),
-          `Vendor requested: ${parsed.vendor}`,
-          goalId
-        )
-      );
-    }
+    pushModelTasks(parsed.planningModel, parsed, transcript, goalId, eventDate, planningWindowStart, items);
 
     items.push(
       buildPlanningTask(
         `Final confirmation for ${parsed.goalTitle}`,
-        scheduleWithinWindow(3),
+        scheduleWithinWindow(eventDate, planningWindowStart, 3),
         "Final check before your event.",
         goalId,
         new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate() - 1, 9, 0).toISOString()
@@ -246,7 +317,7 @@ export const buildPlanFromTranscript = (transcript: string): PlannerResult => {
   }
 
   return {
-    summary: `Planned ${items.length} calendar item(s) based only on the details you provided.`,
+    summary: `Used the ${parsed.planningModel} planning model and created ${items.length} calendar item(s) from your details.`,
     items,
   };
 };
