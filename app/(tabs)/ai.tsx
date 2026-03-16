@@ -21,7 +21,7 @@ type VoiceState = "idle" | "listening" | "processing" | "speaking";
 
 export default function AIScreen() {
   const router = useRouter();
-  const { addItem } = useCalendar();
+  const { items: calendarItems, addItem } = useCalendar();
   const { addTask } = useTasks();
 
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
@@ -60,7 +60,7 @@ export default function AIScreen() {
     setVoiceState("processing");
 
     // Parse locally first so task creation is instant and does not wait on network AI response.
-    const plan = buildPlanFromTranscript(transcript);
+    const plan = buildPlanFromTranscript(transcript, calendarItems);
 
     // Fire AI call in background for compatibility/analytics, but keep UI flow non-blocking.
     void askAI(transcript);
@@ -74,7 +74,7 @@ export default function AIScreen() {
           title: item.title,
           time: `By ${item.date.toDateString()}`,
           app: "AI Planner",
-          priority: "Medium",
+          priority: /urgent|asap|critical/i.test(item.title) ? "High" : "Medium",
         });
       }
     }
