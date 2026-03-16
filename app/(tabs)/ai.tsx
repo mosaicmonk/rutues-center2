@@ -59,14 +59,14 @@ export default function AIScreen() {
     setListeningModalOpen(false);
     setVoiceState("processing");
 
-    // Keep existing AI call for language polish/fallback handling.
-    await askAI(transcript);
-
-    // Parse transcript into structured calendar/task records used by the real app state.
+    // Parse locally first so task creation is instant and does not wait on network AI response.
     const plan = buildPlanFromTranscript(transcript);
 
+    // Fire AI call in background for compatibility/analytics, but keep UI flow non-blocking.
+    void askAI(transcript);
+
     // Save first, navigate second, so Calendar is already populated on arrival.
-    plan.items.forEach((item) => {
+    for (const item of plan.items) {
       addItem(item);
       if (item.kind === "task") {
         addTask({
@@ -77,21 +77,16 @@ export default function AIScreen() {
           priority: "Medium",
         });
       }
-    });
-
-    setVoiceState("speaking");
+    }
 
     const focusDate = plan.items[0]?.date ?? new Date();
 
-    // Small delay gives users a clear "saved" state before transitioning tabs.
-    speakTimeoutRef.current = setTimeout(() => {
-      setVoiceState("idle");
-      setDraftTranscript("");
-      router.push({
-        pathname: "/(tabs)/calendar",
-        params: { focusDate: focusDate.toISOString() },
-      });
-    }, 320);
+    setVoiceState("idle");
+    setDraftTranscript("");
+    router.push({
+      pathname: "/(tabs)/calendar",
+      params: { focusDate: focusDate.toISOString() },
+    });
   };
 
   const bubbleState: BubbleVisualState = voiceState === "idle" ? "idle" : "active";
