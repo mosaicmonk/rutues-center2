@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import React from 'react';
 import {
+  Animated,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -8,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { Task, useTasks } from '../../TaskContext';
 
 /**
@@ -19,7 +21,7 @@ import { Task, useTasks } from '../../TaskContext';
  */
 export default function HomeScreen() {
   const router = useRouter();
-  const { tasks } = useTasks();
+  const { tasks, removeTask } = useTasks();
 
   const goToAi = () => {
     router.push('/(tabs)/ai'); // AI tab
@@ -82,6 +84,7 @@ export default function HomeScreen() {
             key={task.id}
             task={task}
             onPress={goToCalendar} // tap task -> calendar hub
+            onDelete={() => removeTask(task.id)}
           />
         ))}
 
@@ -100,34 +103,59 @@ export default function HomeScreen() {
 function TaskCard({
   task,
   onPress,
+  onDelete,
 }: {
   task: Task;
   onPress: () => void;
+  onDelete: () => void;
 }) {
   const { priority, title, time, app } = task;
 
   return (
-    <TouchableOpacity style={styles.taskCard} onPress={onPress}>
-      <View style={styles.taskLeft}>
-        <View
-          style={[
-            styles.dot,
-            priority === 'High' && { backgroundColor: '#ff4d67' },
-            priority === 'Medium' && { backgroundColor: '#f6c945' },
-            priority === 'Low' && { backgroundColor: '#5ad49b' },
-          ]}
-        />
-        <View>
-          <View style={styles.chip}>
-            <Text style={styles.chipText}>{priority}</Text>
+    <View style={styles.swipeRowWrap}>
+      <Swipeable
+        overshootRight={false}
+        friction={2}
+        rightThreshold={38}
+        renderRightActions={(_progress, dragX) => {
+          const scale = dragX.interpolate({
+            inputRange: [-120, -20, 0],
+            outputRange: [1, 0.92, 0.92],
+            extrapolate: 'clamp',
+          });
+
+          return (
+            <Animated.View style={[styles.deleteAction, { transform: [{ scale }] }]}>
+              <TouchableOpacity style={styles.deleteActionBtn} onPress={onDelete} activeOpacity={0.82}>
+                <Text style={styles.deleteActionText}>Delete</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          );
+        }}
+      >
+        <TouchableOpacity style={styles.taskCard} onPress={onPress} activeOpacity={0.9}>
+          <View style={styles.taskLeft}>
+            <View
+              style={[
+                styles.dot,
+                priority === 'High' && { backgroundColor: '#ff4d67' },
+                priority === 'Medium' && { backgroundColor: '#f6c945' },
+                priority === 'Low' && { backgroundColor: '#5ad49b' },
+              ]}
+            />
+            <View>
+              <View style={styles.chip}>
+                <Text style={styles.chipText}>{priority}</Text>
+              </View>
+              <Text style={styles.taskTitle}>{title}</Text>
+              <Text style={styles.taskMeta}>
+                {time ?? 'Anytime'} {app ? `• ${app}` : ''}
+              </Text>
+            </View>
           </View>
-          <Text style={styles.taskTitle}>{title}</Text>
-          <Text style={styles.taskMeta}>
-            {time ?? 'Anytime'} {app ? `• ${app}` : ''}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
+        </TouchableOpacity>
+      </Swipeable>
+    </View>
   );
 }
 
@@ -240,7 +268,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#18122f',
     borderRadius: 20,
     padding: 14,
+  },
+  swipeRowWrap: {
     marginTop: 10,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  deleteAction: {
+    width: 96,
+    backgroundColor: '#ff4d67',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteActionBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+    minWidth: 80,
+  },
+  deleteActionText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   taskLeft: {
     flexDirection: 'row',
