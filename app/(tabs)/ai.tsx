@@ -4,6 +4,7 @@ import React, { useMemo, useRef, useState } from "react";
 import {
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,31 +15,35 @@ import {
 import { useCalendar } from "../../CalendarContext";
 import { useTasks } from "../../TaskContext";
 import AIActivationBubble, { BubbleVisualState } from "../../components/ai/AIActivationBubble";
-import { buildPlanFromTranscript } from "../../services/aiPlanner";
+import { BrainDumpPlan, buildBrainDumpPlan } from "../../services/aiPlanner";
 import { askAI } from "../../services/aiService";
 
-type VoiceState = "idle" | "listening" | "processing" | "speaking";
+type VoiceState = "idle" | "listening" | "processing";
 
 export default function AIScreen() {
   const router = useRouter();
-  const { addItem } = useCalendar();
+  const { items: calendarItems, addItem } = useCalendar();
   const { addTask } = useTasks();
 
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [listeningModalOpen, setListeningModalOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [draftTranscript, setDraftTranscript] = useState("");
+  const [previewPlan, setPreviewPlan] = useState<BrainDumpPlan | null>(null);
 
-  const speakTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const processTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const resetSession = () => {
-    if (speakTimeoutRef.current) {
-      clearTimeout(speakTimeoutRef.current);
-      speakTimeoutRef.current = null;
+    if (processTimeoutRef.current) {
+      clearTimeout(processTimeoutRef.current);
+      processTimeoutRef.current = null;
     }
 
     setListeningModalOpen(false);
+    setPreviewOpen(false);
     setVoiceState("idle");
     setDraftTranscript("");
+    setPreviewPlan(null);
   };
 
   const startListening = () => {
@@ -48,7 +53,7 @@ export default function AIScreen() {
     setListeningModalOpen(true);
   };
 
-  const processTranscript = async () => {
+  const processTranscript = () => {
     const transcript = draftTranscript.trim();
     if (!transcript) {
       setVoiceState("idle");
@@ -59,30 +64,33 @@ export default function AIScreen() {
     setListeningModalOpen(false);
     setVoiceState("processing");
 
-    // Parse locally first so task creation is instant and does not wait on network AI response.
-    const plan = buildPlanFromTranscript(transcript);
-
-    // Fire AI call in background for compatibility/analytics, but keep UI flow non-blocking.
     void askAI(transcript);
 
-    // Save first, navigate second, so Calendar is already populated on arrival.
-    for (const item of plan.items) {
+    processTimeoutRef.current = setTimeout(() => {
+      const plan = buildBrainDumpPlan(transcript, calendarItems);
+      setPreviewPlan(plan);
+      setPreviewOpen(true);
+      setVoiceState("idle");
+    }, 500);
+  };
+
+  const confirmPlan = () => {
+    if (!previewPlan) return;
+
+    for (const item of previewPlan.calendarItems) {
       addItem(item);
-      if (item.kind === "task") {
-        addTask({
-          id: item.id,
-          title: item.title,
-          time: `By ${item.date.toDateString()}`,
-          app: "AI Planner",
-          priority: "Medium",
-        });
-      }
     }
 
-    const focusDate = plan.items[0]?.date ?? new Date();
+    for (const todo of previewPlan.todoTasks) {
+      addTask(todo);
+    }
 
-    setVoiceState("idle");
+    const focusDate = previewPlan.calendarItems[0]?.date ?? previewPlan.tasks[0]?.date ?? new Date();
+
+    setPreviewOpen(false);
     setDraftTranscript("");
+    setPreviewPlan(null);
+
     router.push({
       pathname: "/(tabs)/calendar",
       params: { focusDate: focusDate.toISOString() },
@@ -90,13 +98,11 @@ export default function AIScreen() {
   };
 
   const bubbleState: BubbleVisualState = voiceState === "idle" ? "idle" : "active";
-
-  const isFlowActive = voiceState === "listening" || voiceState === "processing" || voiceState === "speaking";
+  const isFlowActive = voiceState === "listening" || voiceState === "processing" || previewOpen;
 
   const bubbleLabel = useMemo(() => {
     if (voiceState === "listening") return "Listening";
-    if (voiceState === "processing") return "Processing";
-    if (voiceState === "speaking") return "Saved";
+    if (voiceState === "processing") return "Matching titles";
     return "Tap to talk";
   }, [voiceState]);
 
@@ -104,7 +110,6 @@ export default function AIScreen() {
     <Pressable
       style={styles.container}
       onPress={() => {
-        // Keep tap-off-screen behavior to stop/reset active session.
         if (isFlowActive) {
           resetSession();
         }
@@ -121,27 +126,58 @@ export default function AIScreen() {
         <Pressable
           onPress={(event) => {
             event.stopPropagation();
+            if (voiceState === "processing") return;
             startListening();
           }}
         >
           <AIActivationBubble onPress={startListening} state={bubbleState} label={bubbleLabel} />
         </Pressable>
+
+        {voiceState === "processing" ? <Text style={styles.processingText}>Matching the right titles...</Text> : null}
       </View>
 
       <Modal visible={listeningModalOpen} transparent animationType="fade" onRequestClose={resetSession}>
         <Pressable style={styles.modalBackdrop} onPress={resetSession}>
           <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
-            <Text style={styles.modalTitle}>Listening</Text>
+            <Text style={styles.modalTitle}>Brain Dump</Text>
             <TextInput
               value={draftTranscript}
               onChangeText={setDraftTranscript}
               multiline
-              placeholder="Speak your plan, then paste/type transcript here to continue"
+              placeholder="Speak or type everything on your mind"
               placeholderTextColor="#7e7e94"
               style={styles.modalInput}
             />
             <TouchableOpacity style={styles.doneBtn} onPress={processTranscript}>
-              <Text style={styles.doneBtnText}>Done Speaking</Text>
+              <Text style={styles.doneBtnText}>Organize My Plan</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={previewOpen} transparent animationType="fade" onRequestClose={resetSession}>
+        <Pressable style={styles.modalBackdrop} onPress={resetSession}>
+          <Pressable style={styles.previewCard} onPress={(event) => event.stopPropagation()}>
+            <Text style={styles.modalTitle}>Pick tasks for your plan</Text>
+            <Text style={styles.previewSubtitle}>{previewPlan?.summary}</Text>
+
+            <ScrollView style={styles.previewList} contentContainerStyle={{ gap: 10 }}>
+              {previewPlan?.tasks.map((task) => (
+                <View key={task.id} style={styles.taskCard}>
+                  <View style={styles.taskIconWrap}>
+                    <Ionicons name={task.isTimed ? "time-outline" : "checkbox-outline"} color="#fff" size={16} />
+                  </View>
+                  <View style={styles.taskBody}>
+                    <Text style={styles.taskTitle}>{task.title}</Text>
+                    <Text style={styles.taskMeta}>{task.displayLabel}</Text>
+                  </View>
+                  <Ionicons name="checkmark-circle" size={22} color="#27d89b" />
+                </View>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity style={styles.doneBtn} onPress={confirmPlan}>
+              <Text style={styles.doneBtnText}>Add to Calendar + Tasks</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -178,6 +214,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
+    gap: 14,
+  },
+  processingText: {
+    color: "#d7d0f8",
+    fontSize: 18,
+    fontWeight: "600",
   },
   modalBackdrop: {
     flex: 1,
@@ -190,11 +232,21 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
   },
+  previewCard: {
+    backgroundColor: "#1b1b24",
+    borderRadius: 16,
+    padding: 16,
+    maxHeight: "78%",
+  },
   modalTitle: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "700",
-    marginBottom: 10,
+    marginBottom: 8,
+  },
+  previewSubtitle: {
+    color: "#b6b4c5",
+    marginBottom: 12,
   },
   modalInput: {
     minHeight: 120,
@@ -203,6 +255,38 @@ const styles = StyleSheet.create({
     color: "#fff",
     padding: 12,
     textAlignVertical: "top",
+  },
+  previewList: {
+    marginBottom: 12,
+  },
+  taskCard: {
+    backgroundColor: "#11111a",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  taskIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#8f5bff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  taskBody: {
+    flex: 1,
+  },
+  taskTitle: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  taskMeta: {
+    color: "#b6b4c5",
+    marginTop: 2,
   },
   doneBtn: {
     marginTop: 12,
