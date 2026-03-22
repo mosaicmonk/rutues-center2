@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+
+import { useAuth } from "../../features/auth/AuthContext";
 
 const TITLES: Record<string, string> = {
   "personal-information": "Personal information",
-  notifications: "Notifications",
+  notifications: "Notifications & consent",
   subscribe: "Subscribe",
   security: "Security",
 };
@@ -13,53 +15,174 @@ const TITLES: Record<string, string> = {
 export default function SettingsDetailScreen() {
   const { key } = useLocalSearchParams<{ key: string }>();
   const router = useRouter();
+  const {
+    user,
+    authBusy,
+    saveProfile,
+    saveNotificationPreference,
+    saveTrackingConsent,
+    changePassword,
+    requestPasswordReset,
+  } = useAuth();
   const title = TITLES[key ?? ""] ?? "Settings";
 
-  const [name, setName] = useState("Rutues Center");
-  const [email, setEmail] = useState("user@rutues.app");
-  const [sms, setSms] = useState(true);
-  const [emailNotifs, setEmailNotifs] = useState(true);
+  const [profileForm, setProfileForm] = useState({
+    firstName: user?.firstName ?? "",
+    lastName: user?.lastName ?? "",
+    email: user?.email ?? "",
+    phone: user?.phone ?? "",
+  });
+  const [trackingConsent, setTrackingConsent] = useState(user?.trackingConsent ?? false);
+  const [pushNotifications, setPushNotifications] = useState(user?.notificationPreference.appEnabled ?? false);
   const [plan, setPlan] = useState("Pro");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const body = useMemo(() => {
-    if (key === "personal-information") {
-      return (
-        <View style={styles.card}>
-          <Field label="Name" value={name} onChangeText={setName} />
-          <Field label="Email" value={email} onChangeText={setEmail} />
-        </View>
-      );
+  useEffect(() => {
+    setProfileForm({
+      firstName: user?.firstName ?? "",
+      lastName: user?.lastName ?? "",
+      email: user?.email ?? "",
+      phone: user?.phone ?? "",
+    });
+    setTrackingConsent(user?.trackingConsent ?? false);
+    setPushNotifications(user?.notificationPreference.appEnabled ?? false);
+  }, [user]);
+
+  const handleProfileSave = async () => {
+    try {
+      setError(null);
+      setMessage(null);
+      await saveProfile({
+        firstName: profileForm.firstName.trim(),
+        lastName: profileForm.lastName.trim(),
+        email: profileForm.email.trim().toLowerCase(),
+        phone: profileForm.phone.trim(),
+      });
+      setMessage("Profile updated.");
+    } catch (profileError) {
+      setError(profileError instanceof Error ? profileError.message : "Unable to save your profile.");
     }
+  };
 
-    if (key === "notifications") {
-      return (
-        <View style={styles.card}>
-          <RowSwitch label="Push notifications" value={sms} onChange={setSms} />
-          <RowSwitch label="Email updates" value={emailNotifs} onChange={setEmailNotifs} />
-        </View>
-      );
+  const handleNotificationSave = async (value: boolean) => {
+    try {
+      setError(null);
+      setMessage(null);
+      await saveNotificationPreference(value);
+      setMessage("Notification preference updated.");
+    } catch (notificationError) {
+      setError(notificationError instanceof Error ? notificationError.message : "Unable to update notifications.");
     }
+  };
 
-    if (key === "subscribe") {
-      return (
-        <View style={styles.card}>
-          <Text style={styles.label}>Current Plan</Text>
-          <Text style={styles.plan}>{plan}</Text>
-          <Pressable style={styles.button} onPress={() => setPlan(plan === "Pro" ? "Business" : "Pro")}> 
-            <Text style={styles.buttonText}>Switch Plan</Text>
-          </Pressable>
-        </View>
-      );
+  const handleTrackingSave = async (value: boolean) => {
+    try {
+      setError(null);
+      setMessage(null);
+      await saveTrackingConsent(value);
+      setMessage("Tracking consent updated.");
+    } catch (trackingError) {
+      setError(trackingError instanceof Error ? trackingError.message : "Unable to update tracking consent.");
     }
+  };
 
-    return (
+  const handleChangePassword = async () => {
+    try {
+      setError(null);
+      setMessage(null);
+      const responseMessage = await changePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setMessage(responseMessage);
+    } catch (passwordError) {
+      setError(passwordError instanceof Error ? passwordError.message : "Unable to update your password.");
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    try {
+      setError(null);
+      setMessage(null);
+      const responseMessage = await requestPasswordReset(user?.email ?? profileForm.email);
+      setMessage(responseMessage);
+    } catch (resetError) {
+      setError(resetError instanceof Error ? resetError.message : "Unable to start password reset.");
+    }
+  };
+
+  useEffect(() => {
+    if (message) {
+      Alert.alert(title, message);
+    }
+  }, [message, title]);
+
+  let body: React.ReactNode;
+
+  if (key === "personal-information") {
+    body = (
       <View style={styles.card}>
-        <Field label="Current Password" value="" secure />
-        <Field label="New Password" value="" secure />
-        <Pressable style={styles.button}><Text style={styles.buttonText}>Update Password</Text></Pressable>
+        <Field label="First name" value={profileForm.firstName} onChangeText={(firstName) => setProfileForm((current) => ({ ...current, firstName }))} />
+        <Field label="Last name" value={profileForm.lastName} onChangeText={(lastName) => setProfileForm((current) => ({ ...current, lastName }))} />
+        <Field label="Email" value={profileForm.email} onChangeText={(email) => setProfileForm((current) => ({ ...current, email }))} keyboardType="email-address" />
+        <Field label="Phone" value={profileForm.phone} onChangeText={(phone) => setProfileForm((current) => ({ ...current, phone }))} keyboardType="phone-pad" />
+        <Pressable style={styles.button} onPress={() => void handleProfileSave()} disabled={authBusy}>
+          <Text style={styles.buttonText}>{authBusy ? "Saving..." : "Save profile"}</Text>
+        </Pressable>
       </View>
     );
-  }, [email, emailNotifs, key, name, plan, sms]);
+  } else if (key === "notifications") {
+    body = (
+      <View style={styles.card}>
+        <RowSwitch
+          label="Push notifications"
+          description="Lets the app send reminders and updates after your onboarding choice."
+          value={pushNotifications}
+          onChange={(value) => {
+            setPushNotifications(value);
+            void handleNotificationSave(value);
+          }}
+        />
+        <RowSwitch
+          label="Tracking / analytics"
+          description="Stores the onboarding tracking consent choice on your account."
+          value={trackingConsent}
+          onChange={(value) => {
+            setTrackingConsent(value);
+            void handleTrackingSave(value);
+          }}
+        />
+        <Text style={styles.metaText}>
+          System notification status: {user?.notificationPreference.systemStatus ?? "unknown"}
+        </Text>
+      </View>
+    );
+  } else if (key === "subscribe") {
+    body = (
+      <View style={styles.card}>
+        <Text style={styles.label}>Current Plan</Text>
+        <Text style={styles.plan}>{plan}</Text>
+        <Pressable style={styles.button} onPress={() => setPlan(plan === "Pro" ? "Business" : "Pro")}>
+          <Text style={styles.buttonText}>Switch Plan</Text>
+        </Pressable>
+      </View>
+    );
+  } else {
+    body = (
+      <View style={styles.card}>
+        <Field label="Current Password" value={currentPassword} onChangeText={setCurrentPassword} secure />
+        <Field label="New Password" value={newPassword} onChangeText={setNewPassword} secure />
+        <Pressable style={styles.button} onPress={() => void handleChangePassword()}>
+          <Text style={styles.buttonText}>Update password</Text>
+        </Pressable>
+        <Pressable style={styles.ghostButton} onPress={() => void handleForgotPassword()}>
+          <Text style={styles.ghostButtonText}>Email me reset instructions</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -69,25 +192,60 @@ export default function SettingsDetailScreen() {
           <Text style={styles.title}>{title}</Text>
           <View style={{ width: 24 }} />
         </View>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
         {body}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function Field({ label, value, onChangeText, secure }: { label: string; value: string; onChangeText?: (v: string) => void; secure?: boolean }) {
+function Field({
+  label,
+  value,
+  onChangeText,
+  secure,
+  keyboardType,
+}: {
+  label: string;
+  value: string;
+  onChangeText?: (v: string) => void;
+  secure?: boolean;
+  keyboardType?: "default" | "email-address" | "phone-pad";
+}) {
   return (
     <View style={{ marginBottom: 12 }}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput value={value} onChangeText={onChangeText} secureTextEntry={secure} style={styles.input} placeholderTextColor="#726f9a" placeholder={label} />
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        secureTextEntry={secure}
+        style={styles.input}
+        placeholderTextColor="#726f9a"
+        placeholder={label}
+        keyboardType={keyboardType}
+        autoCapitalize={keyboardType === "email-address" ? "none" : "words"}
+      />
     </View>
   );
 }
 
-function RowSwitch({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+function RowSwitch({
+  label,
+  description,
+  value,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
   return (
-    <View style={styles.switchRow}>
-      <Text style={styles.switchLabel}>{label}</Text>
+    <View style={styles.switchRowWrap}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.switchLabel}>{label}</Text>
+        <Text style={styles.switchDescription}>{description}</Text>
+      </View>
       <Switch value={value} onValueChange={onChange} />
     </View>
   );
@@ -103,7 +261,20 @@ const styles = StyleSheet.create({
   plan: { color: "#fff", fontSize: 24, fontWeight: "700", marginBottom: 12 },
   input: { backgroundColor: "#221a3b", borderRadius: 10, color: "#fff", padding: 10 },
   button: { marginTop: 10, backgroundColor: "#8f5bff", padding: 12, borderRadius: 10, alignItems: "center" },
+  ghostButton: {
+    marginTop: 12,
+    backgroundColor: "#221a3b",
+    padding: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#342856",
+  },
+  ghostButtonText: { color: "#d7cdf8", fontWeight: "600" },
   buttonText: { color: "#fff", fontWeight: "600" },
-  switchRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginVertical: 10 },
-  switchLabel: { color: "#fff" },
+  switchRowWrap: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 16, marginVertical: 10 },
+  switchLabel: { color: "#fff", fontWeight: "600", marginBottom: 4 },
+  switchDescription: { color: "#a8a2c4", lineHeight: 18 },
+  metaText: { color: "#9e9abb", marginTop: 12 },
+  error: { color: "#ff8fa5", marginBottom: 12 },
 });

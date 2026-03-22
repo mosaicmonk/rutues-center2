@@ -1,30 +1,16 @@
-// app/(tabs)/_layout.tsx
-
-/**
- * TABS LAYOUT (NOT ROOT)
- * =======================
- * This file defines the BOTTOM TAB NAVIGATION.
- *
- * ❌ This is NOT the root layout.
- * ❌ Do NOT put providers here.
- *
- * This layout controls the tab bar:
- * Home | AI | Calendar | Profile
- *
- * Each tab corresponds to a file inside:
- * app/(tabs)/
- *
- * - app/(tabs)/index.tsx     -> "Home"
- * - app/(tabs)/ai.tsx        -> "AI"
- * - app/(tabs)/calendar.tsx  -> "Calendar"
- * - app/(tabs)/profile.tsx   -> "Profile"
- */
-
 import React from "react";
-import { Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
+import { useAuth } from "../../features/auth/AuthContext";
+
 export default function TabsLayout() {
+  const { initialized, isSignedIn } = useAuth();
+
+  if (initialized && !isSignedIn) {
+    return <Redirect href="/(auth)/welcome" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
@@ -41,9 +27,7 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
         }}
       />
 
@@ -51,9 +35,7 @@ export default function TabsLayout() {
         name="ai"
         options={{
           title: "AI",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="sparkles" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => <Ionicons name="sparkles" size={size} color={color} />,
         }}
       />
 
@@ -61,9 +43,7 @@ export default function TabsLayout() {
         name="calendar"
         options={{
           title: "Calendar",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => <Ionicons name="calendar" size={size} color={color} />,
         }}
       />
 
@@ -71,9 +51,7 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
         }}
       />
     </Tabs>

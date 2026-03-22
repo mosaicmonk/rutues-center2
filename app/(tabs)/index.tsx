@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Task, useTasks } from '../../TaskContext';
+import { useAuth } from '../../features/auth/AuthContext';
 
 /**
  * HomeScreen
@@ -22,6 +23,7 @@ import { Task, useTasks } from '../../TaskContext';
 export default function HomeScreen() {
   const router = useRouter();
   const { tasks, removeTask } = useTasks();
+  const { user } = useAuth();
 
   const goToAi = () => {
     router.push('/(tabs)/ai'); // AI tab
@@ -37,11 +39,11 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.greeting}>Good morning</Text>
+            <Text style={styles.greeting}>Good morning{user ? `, ${user.firstName}` : ''}</Text>
             <Text style={styles.appName}>Rutues Center</Text>
           </View>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>RC</Text>
+            <Text style={styles.avatarText}>{user ? `${user.firstName[0] ?? ''}${user.lastName[0] ?? ''}`.trim() || 'RC' : 'RC'}</Text>
           </View>
         </View>
 

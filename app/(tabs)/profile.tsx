@@ -1,102 +1,46 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React from "react";
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 
-const monthFilters = [
-  "This Month",
-  "Last Month",
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
-const analyticsByMonth: Record<string, { total: number; ongoing: number; performance: string; absence: number }> = {
-  "This Month": { total: 22, ongoing: 13, performance: "90%", absence: 1 },
-  "Last Month": { total: 18, ongoing: 9, performance: "83%", absence: 2 },
-  January: { total: 14, ongoing: 8, performance: "80%", absence: 3 },
-  February: { total: 16, ongoing: 9, performance: "81%", absence: 2 },
-  March: { total: 17, ongoing: 10, performance: "84%", absence: 2 },
-  April: { total: 20, ongoing: 11, performance: "87%", absence: 1 },
-  May: { total: 21, ongoing: 12, performance: "88%", absence: 1 },
-  June: { total: 22, ongoing: 13, performance: "90%", absence: 1 },
-  July: { total: 19, ongoing: 10, performance: "85%", absence: 2 },
-  August: { total: 18, ongoing: 9, performance: "84%", absence: 2 },
-  September: { total: 20, ongoing: 11, performance: "87%", absence: 2 },
-  October: { total: 23, ongoing: 14, performance: "92%", absence: 1 },
-  November: { total: 24, ongoing: 15, performance: "93%", absence: 1 },
-  December: { total: 25, ongoing: 16, performance: "94%", absence: 1 },
-};
+import { useAuth } from "../../features/auth/AuthContext";
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const [selectedMonth, setSelectedMonth] = useState("This Month");
-  const [showFilter, setShowFilter] = useState(false);
-
-  const stats = useMemo(() => analyticsByMonth[selectedMonth], [selectedMonth]);
+  const { user, logout, rememberMe } = useAuth();
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.sectionTitle}>Account settings</Text>
+        <Text style={styles.sectionTitle}>Account</Text>
 
-        <Pressable style={styles.card} onPress={() => router.push("/analytics")}> 
-          <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardTitle}>Analytics</Text>
-            <Pressable style={styles.dropdownRow} onPress={() => setShowFilter((p) => !p)}>
-              <Text style={styles.dropdownText}>{selectedMonth}</Text>
-              <Ionicons name="chevron-down" size={14} color="#a7a3c2" />
-            </Pressable>
-          </View>
-
-          {showFilter ? (
-            <View style={styles.monthMenu}>
-              {monthFilters.map((month) => (
-                <Pressable
-                  key={month}
-                  style={styles.monthOption}
-                  onPress={() => {
-                    setSelectedMonth(month);
-                    setShowFilter(false);
-                  }}
-                >
-                  <Text style={styles.monthText}>{month}</Text>
-                </Pressable>
-              ))}
+        <View style={styles.profileCard}>
+          <View style={styles.profileHeader}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {user ? `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.trim() || "RC" : "RC"}
+              </Text>
             </View>
-          ) : null}
-
-          <View style={styles.progressBarBg}>
-            <View style={[styles.progressSegment, { flex: 2, backgroundColor: "#7b6bff" }]} />
-            <View style={[styles.progressSegment, { flex: 2, backgroundColor: "#3ad1ff" }]} />
-            <View style={[styles.progressSegment, { flex: 2, backgroundColor: "#b5ff5a" }]} />
-            <View style={[styles.progressSegment, { flex: 1, backgroundColor: "#ffffff33" }]} />
-          </View>
-
-          <View style={styles.analyticsRow}>
-            <View style={styles.analyticsCol}>
-              <Legend label="Total projects" color="#7b6bff" value={stats.total.toString()} />
-              <Legend label="On going projects" color="#3ad1ff" value={stats.ongoing.toString()} />
-            </View>
-            <View style={styles.analyticsCol}>
-              <Legend label="Performance" color="#b5ff5a" value={stats.performance} />
-              <Legend label="Absence" color="#ffffff66" value={stats.absence.toString()} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.name}>{user ? `${user.firstName} ${user.lastName}` : "Guest"}</Text>
+              <Text style={styles.email}>{user?.email ?? "Not signed in"}</Text>
             </View>
           </View>
-        </Pressable>
 
+          <View style={styles.pillRow}>
+            <StatusPill label={user?.trackingConsent ? "Tracking: On" : "Tracking: Off"} icon="analytics-outline" />
+            <StatusPill
+              label={user?.notificationPreference.appEnabled ? "Notifications: On" : "Notifications: Off"}
+              icon="notifications-outline"
+            />
+            <StatusPill label={rememberMe ? "Remembered device" : "Session only"} icon="key-outline" />
+          </View>
+        </View>
+
+        <Text style={styles.sectionTitle}>Settings</Text>
         <View style={styles.card}>
           <SettingsRow icon="person-circle-outline" label="Personal information" onPress={() => router.push("/settings/personal-information")} />
-          <SettingsRow icon="notifications-outline" label="Notification" onPress={() => router.push("/settings/notifications")} />
+          <SettingsRow icon="notifications-outline" label="Notifications & consent" onPress={() => router.push("/settings/notifications")} />
           <SettingsRow icon="add-circle-outline" label="Subscribe" onPress={() => router.push("/settings/subscribe")} />
           <SettingsRow icon="shield-checkmark-outline" label="Security" onPress={() => router.push("/settings/security")} isLast />
         </View>
@@ -107,19 +51,20 @@ export default function ProfileScreen() {
           <SettingsRow icon="shield-outline" label="Invasion" onPress={() => router.push("/project-settings/invasion")} />
           <SettingsRow icon="attach-outline" label="Attachment" onPress={() => router.push("/project-settings/attachment")} isLast />
         </View>
+
+        <Pressable style={styles.logoutButton} onPress={() => void logout()}>
+          <Text style={styles.logoutText}>Log out</Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function Legend({ label, value, color }: { label: string; value: string; color: string }) {
+function StatusPill({ label, icon }: { label: string; icon: keyof typeof Ionicons.glyphMap }) {
   return (
-    <View style={{ marginBottom: 10 }}>
-      <View style={styles.legendRow}>
-        <View style={[styles.legendDot, { backgroundColor: color }]} />
-        <Text style={styles.legendLabel}>{label}</Text>
-      </View>
-      <Text style={styles.analyticsValue}>{value}</Text>
+    <View style={styles.pill}>
+      <Ionicons name={icon} size={14} color="#d2c5ff" />
+      <Text style={styles.pillText}>{label}</Text>
     </View>
   );
 }
@@ -158,24 +103,42 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#070319" },
   container: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 },
   sectionTitle: { color: "#ffffff", fontSize: 15, fontWeight: "700", marginBottom: 10 },
+  profileCard: { backgroundColor: "#18122f", borderRadius: 24, padding: 18, marginBottom: 16 },
+  profileHeader: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 16 },
+  avatar: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "#8f5bff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: { color: "#fff", fontWeight: "700", fontSize: 18 },
+  name: { color: "#ffffff", fontSize: 20, fontWeight: "700" },
+  email: { color: "#a7a3c2", marginTop: 4 },
+  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#221a3b",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  pillText: { color: "#d9d2f5", fontSize: 12, fontWeight: "600" },
   card: { backgroundColor: "#18122f", borderRadius: 24, padding: 16, marginBottom: 16 },
-  cardHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  cardTitle: { color: "#ffffff", fontSize: 16, fontWeight: "700" },
-  dropdownRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  dropdownText: { color: "#a7a3c2", fontSize: 12 },
-  monthMenu: { backgroundColor: "#211a3b", borderRadius: 12, marginBottom: 12, maxHeight: 200 },
-  monthOption: { paddingHorizontal: 10, paddingVertical: 8 },
-  monthText: { color: "#fff" },
-  progressBarBg: { flexDirection: "row", height: 8, borderRadius: 499, overflow: "hidden", backgroundColor: "#241c3d", marginBottom: 14 },
-  progressSegment: { height: "100%" },
-  analyticsRow: { flexDirection: "row", justifyContent: "space-between", gap: 16 },
-  analyticsCol: { flex: 1 },
-  legendRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendLabel: { color: "#a7a3c2", fontSize: 12 },
-  analyticsValue: { color: "#ffffff", fontSize: 16, fontWeight: "600", marginTop: 2 },
   settingsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 10 },
   settingsLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
   settingsIconCircle: { width: 30, height: 30, borderRadius: 15, backgroundColor: "#221a3b", alignItems: "center", justifyContent: "center" },
   settingsLabel: { color: "#ffffff", fontSize: 14 },
+  logoutButton: {
+    backgroundColor: "#2a173f",
+    borderRadius: 18,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#4b2c67",
+  },
+  logoutText: { color: "#ffb9c8", fontWeight: "700" },
 });
