@@ -57,9 +57,14 @@ const minutesToDate = (base: Date, minutes: number) => {
 
 const dateToMinutes = (date: Date) => date.getHours() * 60 + date.getMinutes();
 
+const formatTaskTime = (item: CalendarItem) => {
+  if (item.allDay) return "To-Do";
+  return `${formatTime(item.startMin)} - ${formatTime(item.endMin)}`;
+};
+
 export default function CalendarScreen() {
   const params = useLocalSearchParams<{ focusDate?: string }>();
-  const { addTask, removeTask } = useTasks();
+  const { addTask, removeTask, upsertTask } = useTasks();
   const { items, addItem, updateItem, removeItem } = useCalendar();
   // (remove the old useState for items)
 
@@ -193,7 +198,6 @@ const [editingEnd, setEditingEnd] = useState<Date | null>(null);
 
   const itemsForSelectedDay = items.filter((it) => sameDay(it.date, selectedDate));
   const itemsForDay = (date: Date) => items.filter((it) => sameDay(it.date, date));
-  const hasItemsOnDay = (date: Date) => itemsForDay(date).length > 0;
 
   // ---------- open editor helpers ----------
 
@@ -338,6 +342,16 @@ const [editingEnd, setEditingEnd] = useState<Date | null>(null);
         attachments,
       };
       updateItem(updated); // <-- shared context
+
+      if (updated.kind === "task") {
+        upsertTask({
+          id: updated.id,
+          title: finalTitle,
+          time: formatTaskTime(updated),
+          app: updated.source === "AI" ? "AI Planner" : "Manual Task",
+          priority: allDay ? ("Medium" as Priority) : ("High" as Priority),
+        });
+      }
     } else {
       const newItem: CalendarItem = {
         id: Date.now().toString(),
@@ -359,9 +373,9 @@ const [editingEnd, setEditingEnd] = useState<Date | null>(null);
         addTask({
           id: newItem.id,
           title: finalTitle,
-          time: `By ${selectedDate.toDateString()}`,
+          time: formatTaskTime(newItem),
           app: "Manual Task",
-          priority: "Medium" as Priority,
+          priority: allDay ? ("Medium" as Priority) : ("High" as Priority),
         });
       }
     }
@@ -386,26 +400,6 @@ const [editingEnd, setEditingEnd] = useState<Date | null>(null);
     Keyboard.dismiss();
     sheetRef.current?.snapToIndex(0);
   };
-  // Nudge start/end time in 15-minute steps
-  const adjustDraftTime = (field: "start" | "end", deltaMinutes: number) => {
-    setDraft((prev) => {
-      if (!prev) return prev;
-
-      let start = prev.startMin;
-      let end = prev.endMin;
-
-      if (field === "start") {
-        // move start but never past end - MIN_BLOCK_MINUTES
-        start = clamp(start + deltaMinutes, 0, end - MIN_BLOCK_MINUTES);
-      } else {
-        // move end but never before start + MIN_BLOCK_MINUTES
-        end = clamp(end + deltaMinutes, start + MIN_BLOCK_MINUTES, 1440);
-      }
-
-      return { startMin: start, endMin: end };
-    });
-  };
-
   const selectedLabel = selectedDate.toLocaleDateString(undefined, {
     weekday: "long",
     month: "short",
