@@ -3,6 +3,9 @@ import { Platform } from "react-native";
 
 interface AIResponse {
   success: boolean;
+  reply?: string;
+  provider?: string;
+  model?: string;
   error?: string;
   [key: string]: unknown;
 }
@@ -40,9 +43,10 @@ export async function askAI(userMessage: string): Promise<AIResponse> {
     });
 
     if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as AIResponse | null;
       return {
         success: false,
-        error: `Request failed with status ${response.status}`,
+        error: payload?.error ?? `Request failed with status ${response.status}`,
       };
     }
 
@@ -50,8 +54,7 @@ export async function askAI(userMessage: string): Promise<AIResponse> {
   } catch {
     return {
       success: false,
-      error:
-        "Unable to reach AI service. Set EXPO_PUBLIC_AI_BASE_URL or run backend on port 3000.",
+      error: "Unable to reach AI service. Start the backend or set EXPO_PUBLIC_AI_BASE_URL.",
     };
   }
 }
