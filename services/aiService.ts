@@ -1,10 +1,31 @@
-import { getApiBaseUrl } from "./api";
+import Constants from "expo-constants";
+import { Platform } from "react-native";
 
 interface AIResponse {
   success: boolean;
   error?: string;
   [key: string]: unknown;
 }
+
+const getApiBaseUrl = () => {
+  const envUrl = process.env.EXPO_PUBLIC_AI_BASE_URL ?? process.env.EXPO_PUBLIC_API_BASE_URL;
+  if (envUrl) {
+    return envUrl;
+  }
+
+  const hostUri = Constants.expoConfig?.hostUri ?? Constants.manifest2?.extra?.expoGo?.debuggerHost;
+  const host = hostUri?.split(":")[0];
+
+  if (host) {
+    return `http://${host}:3000`;
+  }
+
+  if (Platform.OS === "android") {
+    return "http://10.0.2.2:3000";
+  }
+
+  return "http://localhost:3000";
+};
 
 export async function askAI(userMessage: string): Promise<AIResponse> {
   try {
@@ -29,7 +50,8 @@ export async function askAI(userMessage: string): Promise<AIResponse> {
   } catch {
     return {
       success: false,
-      error: "Unable to reach AI service. Set EXPO_PUBLIC_API_BASE_URL or run backend on port 3000.",
+      error:
+        "Unable to reach AI service. Set EXPO_PUBLIC_AI_BASE_URL or EXPO_PUBLIC_API_BASE_URL or run backend on port 3000.",
     };
   }
 }
